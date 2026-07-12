@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../models/location_model.dart';
 import '../providers/location_provider.dart';
 import '../widgets/category_card.dart';
@@ -27,8 +28,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: SafeArea(
         child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
           slivers: [
-            // App Bar
             SliverAppBar(
               floating: true,
               snap: true,
@@ -49,40 +50,50 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-
-            // Search Bar
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search buildings, labs, facilities...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              context.read<LocationProvider>().searchLocations('');
-                            },
-                          )
-                        : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOut,
+                builder: (context, value, child) {
+                  return Transform.translate(
+                    offset: Offset(0, 10 * (1 - value)),
+                    child: Opacity(opacity: value, child: child),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search buildings, labs, facilities...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                                context
+                                    .read<LocationProvider>()
+                                    .searchLocations('');
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[100],
                     ),
-                    filled: true,
-                    fillColor: Colors.grey[100],
+                    onChanged: (value) {
+                      context.read<LocationProvider>().searchLocations(value);
+                      setState(() {});
+                    },
                   ),
-                  onChanged: (value) {
-                    context.read<LocationProvider>().searchLocations(value);
-                    setState(() {});
-                  },
                 ),
               ),
             ),
-
-            // Categories Section
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -108,13 +119,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             itemBuilder: (context, index) {
                               final category = LocationCategory.values[index];
                               final count = categoryCounts[category] ?? 0;
-                              
-                              if (count == 0) return const SizedBox.shrink();
-                              
+
+                              if (count == 0) {
+                                return const SizedBox.shrink();
+                              }
+
                               return CategoryCard(
                                 category: category,
                                 count: count,
-                                isSelected: provider.selectedCategory == category,
+                                index: index,
+                                isSelected:
+                                    provider.selectedCategory == category,
                                 onTap: () {
                                   if (provider.selectedCategory == category) {
                                     provider.filterByCategory(null);
@@ -132,10 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
-            // Locations List
             Consumer<LocationProvider>(
               builder: (context, provider, child) {
                 final locations = provider.filteredLocations;
@@ -173,6 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         final location = locations[index];
                         return LocationCard(
                           location: location,
+                          animationIndex: index,
                           onTap: () {
                             Navigator.push(
                               context,
@@ -191,7 +204,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               },
             ),
-
             const SliverToBoxAdapter(child: SizedBox(height: 80)),
           ],
         ),

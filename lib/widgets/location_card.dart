@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../models/location_model.dart';
 import '../providers/location_provider.dart';
 import '../providers/navigation_provider.dart';
@@ -7,123 +8,134 @@ import '../providers/navigation_provider.dart';
 class LocationCard extends StatelessWidget {
   final CampusLocation location;
   final VoidCallback onTap;
+  final int animationIndex;
 
   const LocationCard({
     super.key,
     required this.location,
     required this.onTap,
+    this.animationIndex = 0,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Row(
-            children: [
-              // Image or Icon/Category indicator
-              location.imageUrl != null && location.imageUrl!.isNotEmpty
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.network(
-                        location.imageUrl!,
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            _buildCategoryIcon(location.category),
-                      ),
-                    )
-                  : _buildCategoryIcon(location.category),
-              const SizedBox(width: 12),
-
-              // Location info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      location.name,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      location.description,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _getCategoryColor(location.category)
-                                .withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            location.category.displayName,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: _getCategoryColor(location.category),
-                              fontWeight: FontWeight.w600,
-                            ),
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 260 + (animationIndex * 40)),
+      curve: Curves.easeOut,
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 14 * (1 - value)),
+          child: Opacity(opacity: value, child: child),
+        );
+      },
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Row(
+              children: [
+                location.imageUrl != null && location.imageUrl!.isNotEmpty
+                    ? Hero(
+                        tag: 'location-media-${location.id}',
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(
+                            location.imageUrl!,
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                _buildCategoryIcon(location.category),
                           ),
                         ),
-                        if (location.buildingCode != null) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            location.buildingCode!,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[500],
-                              fontWeight: FontWeight.w500,
+                      )
+                    : _buildCategoryIcon(location.category),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        location.name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        location.description,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[600],
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _getCategoryColor(location.category)
+                                  .withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              location.category.displayName,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: _getCategoryColor(location.category),
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
+                          if (location.buildingCode != null) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              location.buildingCode!,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[500],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-
-              // Favorite button
-              Consumer<LocationProvider>(
-                builder: (context, provider, child) {
-                  final isFavorite = provider.isFavorite(location);
-                  return IconButton(
-                    icon: Icon(
-                      isFavorite ? Icons.favorite : Icons.favorite_border,
-                      color: isFavorite ? Colors.red : Colors.grey,
-                    ),
-                    onPressed: () {
-                      provider.toggleFavorite(location);
-                    },
-                  );
-                },
-              ),
-            ],
+                Consumer<LocationProvider>(
+                  builder: (context, provider, child) {
+                    final isFavorite = provider.isFavorite(location);
+                    return IconButton(
+                      icon: Icon(
+                        isFavorite ? Icons.favorite : Icons.favorite_border,
+                        color: isFavorite ? Colors.red : Colors.grey,
+                      ),
+                      onPressed: () {
+                        provider.toggleFavorite(location);
+                      },
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -224,7 +236,8 @@ class LocationPopup extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
       ),
       child: Container(
-        width: 280,
+        constraints: const BoxConstraints(maxWidth: 320),
+        width: double.infinity,
         padding: const EdgeInsets.all(12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -287,20 +300,17 @@ class LocationPopup extends StatelessWidget {
             ),
             if (distanceText != null && timeText != null) ...[
               const SizedBox(height: 10),
-              Row(
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
                 children: [
-                  Icon(Icons.straighten, size: 14, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Distance: $distanceText',
-                    style: const TextStyle(fontSize: 12),
+                  _buildInfoPill(
+                    icon: Icons.straighten,
+                    text: 'Distance: $distanceText',
                   ),
-                  const SizedBox(width: 12),
-                  Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Est. time: $timeText',
-                    style: const TextStyle(fontSize: 12),
+                  _buildInfoPill(
+                    icon: Icons.access_time,
+                    text: 'Est. time: $timeText',
                   ),
                 ],
               ),
@@ -334,6 +344,30 @@ class LocationPopup extends StatelessWidget {
           category.icon,
           style: const TextStyle(fontSize: 28),
         ),
+      ),
+    );
+  }
+
+  Widget _buildInfoPill({
+    required IconData icon,
+    required String text,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.grey[600]),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: const TextStyle(fontSize: 12),
+          ),
+        ],
       ),
     );
   }

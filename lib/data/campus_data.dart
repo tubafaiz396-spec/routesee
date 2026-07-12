@@ -692,7 +692,7 @@ class CampusData {
       id: 'zoology_block',
       name: 'Zoology Block',
       description: 'Zoology department with labs and classrooms.',
-      coordinates: const LatLng(331.56456611815174, 74.32633381349302),
+      coordinates: const LatLng(31.56456611815174, 74.32633381349302),
       category: LocationCategory.academic,
       facilities: ['Classrooms', 'Zoology Lab', 'Specimens', 'Microscopes'],
       openingHours: '8:00 AM - 6:00 PM',

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
 import 'package:latlong2/latlong.dart' as latlng;
 import 'package:provider/provider.dart';
+
 import '../data/campus_data.dart';
 import '../models/location_model.dart';
 import '../providers/location_provider.dart';
@@ -9,46 +10,196 @@ import '../providers/navigation_provider.dart';
 import '../widgets/location_card.dart';
 
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+  final MapScreenController? controller;
+
+  const MapScreen({
+    super.key,
+    this.controller,
+  });
 
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
 
+class MapScreenController {
+  VoidCallback? _showCampusOverviewHandler;
+  VoidCallback? _focusActiveRouteHandler;
+
+  void _bind({
+    required VoidCallback onShowCampusOverview,
+    required VoidCallback onFocusActiveRoute,
+  }) {
+    _showCampusOverviewHandler = onShowCampusOverview;
+    _focusActiveRouteHandler = onFocusActiveRoute;
+  }
+
+  void showCampusOverview() {
+    _showCampusOverviewHandler?.call();
+  }
+
+  void focusActiveRoute() {
+    _focusActiveRouteHandler?.call();
+  }
+}
+
 class _MapScreenState extends State<MapScreen> {
   gmaps.GoogleMapController? _mapController;
   late gmaps.LatLng _currentCenter;
-  double _zoomLevel = 16.0;
+  double _zoomLevel = 18.0;
   CampusLocation? _selectedLocation;
+  String? _lastFocusedRouteKey;
+  MapViewMode? _lastAppliedMapViewMode;
 
   @override
   void initState() {
     super.initState();
     _currentCenter = _toGoogleLatLng(CampusData.campusCenter);
+    _bindController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestCurrentLocation();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant MapScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      _bindController();
+    }
+  }
+
+  void _bindController() {
+    widget.controller?._bind(
+      onShowCampusOverview: focusOnCampusOverview,
+      onFocusActiveRoute: _focusActiveRoute,
+    );
   }
 
   Future<void> _requestCurrentLocation() async {
     final navProvider = context.read<NavigationProvider>();
     final success = await navProvider.getCurrentLocationFromGPS();
 
+    if (!mounted) {
+      return;
+    }
+
     if (success && navProvider.currentLocation != null) {
-      _centerMap(_toGoogleLatLng(navProvider.currentLocation!));
+      final destination = navProvider.destination;
+      if (destination != null) {
+        _focusOnRoute(navProvider.currentLocation!, destination.coordinates);
+      }
+    } else if (navProvider.destination != null) {
+      _centerMap(_toGoogleLatLng(navProvider.destination!.coordinates));
     }
   }
 
   void _centerMap(gmaps.LatLng target) {
+    final tilt =
+        _getTiltForMode(context.read<NavigationProvider>().mapViewMode);
     _mapController?.animateCamera(
       gmaps.CameraUpdate.newCameraPosition(
-        gmaps.CameraPosition(target: target, zoom: _zoomLevel),
+        gmaps.CameraPosition(target: target, zoom: _zoomLevel, tilt: tilt),
       ),
     );
 
     setState(() {
       _currentCenter = target;
     });
+  }
+
+  void _focusOnRoute(latlng.LatLng from, latlng.LatLng to) {
+    final navProvider = context.read<NavigationProvider>();
+    final routePoints = navProvider.routePoints.length > 1
+        ? navProvider.routePoints.map(_toGoogleLatLng).toList()
+        : [_toGoogleLatLng(from), _toGoogleLatLng(to)];
+
+    _fitPoints(routePoints, padding: routePoints.length > 2 ? 56 : 68);
+  }
+
+  void _focusActiveRoute() {
+    final navProvider = context.read<NavigationProvider>();
+    final currentLocation = navProvider.currentLocation;
+    final destination = navProvider.destination;
+
+    if (currentLocation == null || destination == null) {
+      return;
+    }
+
+    _focusOnRoute(currentLocation, destination.coordinates);
+  }
+
+  void focusOnCampusOverview() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _selectedLocation = null;
+      _currentCenter = _toGoogleLatLng(CampusData.campusCenter);
+    });
+
+    _fitPoints(
+      CampusData.locations
+          .map((location) => _toGoogleLatLng(location.coordinates))
+          .toList(),
+      padding: 70,
+    );
+  }
+
+  void _fitPoints(
+    List<gmaps.LatLng> points, {
+    double padding = 70,
+  }) {
+    if (_mapController == null) {
+      if (points.isNotEmpty) {
+        _currentCenter = points.first;
+      }
+      return;
+    }
+
+    if (points.isEmpty) {
+      _centerMap(_toGoogleLatLng(CampusData.campusCenter));
+      return;
+    }
+
+    if (points.length == 1) {
+      _centerMap(points.first);
+      return;
+    }
+
+    double? minLatitude;
+    double? maxLatitude;
+    double? minLongitude;
+    double? maxLongitude;
+
+    for (final point in points) {
+      minLatitude = minLatitude == null
+          ? point.latitude
+          : (point.latitude < minLatitude ? point.latitude : minLatitude);
+      maxLatitude = maxLatitude == null
+          ? point.latitude
+          : (point.latitude > maxLatitude ? point.latitude : maxLatitude);
+      minLongitude = minLongitude == null
+          ? point.longitude
+          : (point.longitude < minLongitude ? point.longitude : minLongitude);
+      maxLongitude = maxLongitude == null
+          ? point.longitude
+          : (point.longitude > maxLongitude ? point.longitude : maxLongitude);
+    }
+
+    final bounds = gmaps.LatLngBounds(
+      southwest: gmaps.LatLng(minLatitude!, minLongitude!),
+      northeast: gmaps.LatLng(maxLatitude!, maxLongitude!),
+    );
+
+    _mapController!.animateCamera(
+      gmaps.CameraUpdate.newLatLngBounds(bounds, padding),
+    );
+
+    _currentCenter = gmaps.LatLng(
+      (minLatitude + maxLatitude) / 2,
+      (minLongitude + maxLongitude) / 2,
+    );
   }
 
   void _changeZoom(double delta) {
@@ -66,31 +217,46 @@ class _MapScreenState extends State<MapScreen> {
     return gmaps.LatLng(source.latitude, source.longitude);
   }
 
-  latlng.LatLng _toLatLng(gmaps.LatLng source) {
-    return latlng.LatLng(source.latitude, source.longitude);
+  double _getTiltForMode(MapViewMode mode) {
+    switch (mode) {
+      case MapViewMode.normal2d:
+        return 0;
+      case MapViewMode.buildings3d:
+        return 55;
+      case MapViewMode.hybrid:
+        return 0;
+    }
   }
 
-  latlng.LatLng _projectPointOnSegment(
-    latlng.LatLng start,
-    latlng.LatLng end,
-    latlng.LatLng point,
-  ) {
-    final dx = end.longitude - start.longitude;
-    final dy = end.latitude - start.latitude;
-    final lengthSquared = dx * dx + dy * dy;
+  gmaps.MapType _getMapTypeForMode(MapViewMode mode) {
+    switch (mode) {
+      case MapViewMode.normal2d:
+      case MapViewMode.buildings3d:
+        return gmaps.MapType.normal;
+      case MapViewMode.hybrid:
+        return gmaps.MapType.hybrid;
+    }
+  }
 
-    if (lengthSquared == 0) {
-      return start;
+  void _applyMapViewMode(NavigationProvider navProvider) {
+    if (_mapController == null) {
+      return;
     }
 
-    final t = (((point.longitude - start.longitude) * dx) +
-            ((point.latitude - start.latitude) * dy)) /
-        lengthSquared;
-    final clampedT = t.clamp(0.0, 1.0);
+    if (_lastAppliedMapViewMode == navProvider.mapViewMode) {
+      return;
+    }
 
-    return latlng.LatLng(
-      start.latitude + dy * clampedT,
-      start.longitude + dx * clampedT,
+    _lastAppliedMapViewMode = navProvider.mapViewMode;
+
+    _mapController!.animateCamera(
+      gmaps.CameraUpdate.newCameraPosition(
+        gmaps.CameraPosition(
+          target: _currentCenter,
+          zoom: _zoomLevel,
+          tilt: _getTiltForMode(navProvider.mapViewMode),
+        ),
+      ),
     );
   }
 
@@ -100,16 +266,15 @@ class _MapScreenState extends State<MapScreen> {
     CampusLocation? destination,
   ) {
     final markers = <gmaps.Marker>{};
+    final visibleLocations = destination != null ? [destination] : locations;
 
-    for (final location in locations) {
-      final isDestination = destination?.id == location.id;
-
+    for (final location in visibleLocations) {
       markers.add(
         gmaps.Marker(
           markerId: gmaps.MarkerId(location.id),
           position: _toGoogleLatLng(location.coordinates),
           icon: gmaps.BitmapDescriptor.defaultMarkerWithHue(
-            isDestination
+            destination?.id == location.id
                 ? gmaps.BitmapDescriptor.hueRed
                 : _getMarkerHue(location.category),
           ),
@@ -167,50 +332,27 @@ class _MapScreenState extends State<MapScreen> {
   ) {
     final currentLocation = navProvider.currentLocation;
     final destination = navProvider.destination;
-    final routeStart = navProvider.navigationStart;
 
     if (currentLocation == null || destination == null) {
       return {};
     }
 
-    if (!navProvider.isNavigating || routeStart == null) {
-      return {
-        gmaps.Polyline(
-          polylineId: const gmaps.PolylineId('route'),
-          points: [
+    final routePoints = navProvider.routePoints.length > 1
+        ? navProvider.routePoints.map(_toGoogleLatLng).toList()
+        : [
             _toGoogleLatLng(currentLocation),
             _toGoogleLatLng(destination.coordinates),
-          ],
-          color: color,
-          width: 5,
-        ),
-      };
-    }
-
-    final projectedPoint = _projectPointOnSegment(
-      _toLatLng(_toGoogleLatLng(routeStart)),
-      _toLatLng(_toGoogleLatLng(destination.coordinates)),
-      _toLatLng(_toGoogleLatLng(currentLocation)),
-    );
+          ];
 
     return {
       gmaps.Polyline(
-        polylineId: const gmaps.PolylineId('route_traveled'),
-        points: [
-          _toGoogleLatLng(routeStart),
-          gmaps.LatLng(projectedPoint.latitude, projectedPoint.longitude),
-        ],
-        color: Colors.black26,
-        width: 5,
-      ),
-      gmaps.Polyline(
-        polylineId: const gmaps.PolylineId('route_remaining'),
-        points: [
-          gmaps.LatLng(projectedPoint.latitude, projectedPoint.longitude),
-          _toGoogleLatLng(destination.coordinates),
-        ],
+        polylineId: const gmaps.PolylineId('live_route'),
+        points: routePoints,
         color: color,
-        width: 5,
+        width: 6,
+        startCap: gmaps.Cap.roundCap,
+        endCap: gmaps.Cap.roundCap,
+        jointType: gmaps.JointType.round,
       ),
     };
   }
@@ -218,6 +360,38 @@ class _MapScreenState extends State<MapScreen> {
   void _onMarkerTap(CampusLocation location) {
     setState(() {
       _selectedLocation = location;
+    });
+    _centerMap(_toGoogleLatLng(location.coordinates));
+  }
+
+  void _maybeFocusSelectedRoute(NavigationProvider navProvider) {
+    final destination = navProvider.destination;
+    final currentLocation = navProvider.currentLocation;
+
+    if (_mapController == null) {
+      return;
+    }
+
+    if (destination == null) {
+      _lastFocusedRouteKey = null;
+      return;
+    }
+
+    if (currentLocation == null) {
+      return;
+    }
+
+    final routeKey = '${destination.id}:${navProvider.hasResolvedRoute}';
+    if (_lastFocusedRouteKey == routeKey) {
+      return;
+    }
+
+    _lastFocusedRouteKey = routeKey;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _focusOnRoute(currentLocation, destination.coordinates);
     });
   }
 
@@ -227,20 +401,33 @@ class _MapScreenState extends State<MapScreen> {
     Color accentColor,
   ) {
     final currentLocation = navProvider.currentLocation;
-    final distanceMeters = navProvider.isNavigating
-        ? navProvider.remainingDistanceMeters
-        : currentLocation != null
+    final isActiveDestination = navProvider.destination?.id == destination.id;
+    final distanceMeters = isActiveDestination
+        ? (navProvider.routeDistanceMeters ??
+            (currentLocation != null
+                ? navProvider.calculateDistance(
+                    currentLocation,
+                    destination.coordinates,
+                  )
+                : null))
+        : (currentLocation != null
             ? navProvider.calculateDistance(
                 currentLocation,
                 destination.coordinates,
               )
-            : null;
+            : null);
     final distance = distanceMeters != null
         ? navProvider.formatDistance(distanceMeters)
         : null;
-    final estimatedTime = distanceMeters != null
-        ? navProvider.getEstimatedTime(distanceMeters)
-        : null;
+    final estimatedTime = isActiveDestination
+        ? (navProvider.routeDuration != null
+            ? navProvider.formatDuration(navProvider.routeDuration!)
+            : (distanceMeters != null
+                ? navProvider.getEstimatedTime(distanceMeters)
+                : null))
+        : (distanceMeters != null
+            ? navProvider.getEstimatedTime(distanceMeters)
+            : null);
 
     return Card(
       elevation: 8,
@@ -294,9 +481,13 @@ class _MapScreenState extends State<MapScreen> {
                     children: [
                       Icon(Icons.straighten, color: accentColor),
                       const SizedBox(height: 4),
-                      Text(
-                        distance,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 180),
+                        child: Text(
+                          distance,
+                          key: ValueKey(distance),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ],
                   ),
@@ -304,13 +495,30 @@ class _MapScreenState extends State<MapScreen> {
                     children: [
                       Icon(Icons.access_time, color: Colors.green),
                       const SizedBox(height: 4),
-                      Text(
-                        estimatedTime,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 180),
+                        child: Text(
+                          estimatedTime,
+                          key: ValueKey(estimatedTime),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ],
                   ),
                 ],
+              ),
+            ],
+            if (navProvider.isLoadingRoute) ...[
+              const SizedBox(height: 12),
+              const LinearProgressIndicator(minHeight: 3),
+            ] else if (navProvider.routeError != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                navProvider.routeError!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.orange[800],
+                ),
               ),
             ],
           ],
@@ -328,14 +536,30 @@ class _MapScreenState extends State<MapScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            tooltip: 'Show all departments',
+            icon: const Icon(Icons.apartment),
+            onPressed: focusOnCampusOverview,
+          ),
+          IconButton(
             icon: const Icon(Icons.my_location),
-            onPressed: () {
+            onPressed: () async {
               final navProvider = context.read<NavigationProvider>();
               final current = navProvider.currentLocation;
               if (current != null) {
                 _centerMap(_toGoogleLatLng(current));
               } else {
-                _requestCurrentLocation();
+                await _requestCurrentLocation();
+                if (!mounted ||
+                    context.read<NavigationProvider>().currentLocation !=
+                        null) {
+                  return;
+                }
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Unable to get your live location.'),
+                  ),
+                );
               }
             },
           ),
@@ -343,6 +567,8 @@ class _MapScreenState extends State<MapScreen> {
       ),
       body: Consumer2<LocationProvider, NavigationProvider>(
         builder: (context, locationProvider, navProvider, child) {
+          _maybeFocusSelectedRoute(navProvider);
+          _applyMapViewMode(navProvider);
           final destination = navProvider.destination;
           final markers = _buildMarkers(
             locationProvider.allLocations,
@@ -357,15 +583,31 @@ class _MapScreenState extends State<MapScreen> {
                 initialCameraPosition: gmaps.CameraPosition(
                   target: _currentCenter,
                   zoom: _zoomLevel,
+                  tilt: _getTiltForMode(navProvider.mapViewMode),
                 ),
+                mapType: _getMapTypeForMode(navProvider.mapViewMode),
                 markers: markers,
                 polylines: _buildPolylines(navProvider, polylineColor),
                 onMapCreated: (controller) {
                   _mapController = controller;
+                  _lastAppliedMapViewMode = navProvider.mapViewMode;
 
                   if (navProvider.currentLocation != null) {
-                    _centerMap(_toGoogleLatLng(navProvider.currentLocation!));
+                    if (destination != null) {
+                      _focusActiveRoute();
+                    } else {
+                      focusOnCampusOverview();
+                    }
+                  } else if (destination != null) {
+                    _centerMap(_toGoogleLatLng(destination.coordinates));
+                  } else {
+                    focusOnCampusOverview();
                   }
+                },
+                onTap: (_) {
+                  setState(() {
+                    _selectedLocation = null;
+                  });
                 },
                 onCameraMove: (position) {
                   _currentCenter = position.target;
@@ -376,6 +618,8 @@ class _MapScreenState extends State<MapScreen> {
                 myLocationButtonEnabled: false,
                 buildingsEnabled: true,
                 indoorViewEnabled: true,
+                tiltGesturesEnabled:
+                    navProvider.mapViewMode == MapViewMode.buildings3d,
                 padding: const EdgeInsets.only(bottom: 200),
               ),
               Positioned(
@@ -383,6 +627,24 @@ class _MapScreenState extends State<MapScreen> {
                 bottom: destination != null ? 200 : 120,
                 child: Column(
                   children: [
+                    FloatingActionButton(
+                      mini: true,
+                      heroTag: 'show_overview',
+                      tooltip: 'Show all departments',
+                      onPressed: focusOnCampusOverview,
+                      child: const Icon(Icons.center_focus_strong),
+                    ),
+                    if (destination != null) ...[
+                      const SizedBox(height: 8),
+                      FloatingActionButton(
+                        mini: true,
+                        heroTag: 'focus_route',
+                        tooltip: 'Focus current route',
+                        onPressed: _focusActiveRoute,
+                        child: const Icon(Icons.alt_route),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
                     FloatingActionButton(
                       mini: true,
                       heroTag: 'zoom_in',
@@ -410,7 +672,7 @@ class _MapScreenState extends State<MapScreen> {
                     polylineColor,
                   ),
                 ),
-              if (_selectedLocation != null)
+              if (_selectedLocation != null && destination == null)
                 Positioned(
                   top: 16,
                   left: 16,
@@ -421,8 +683,12 @@ class _MapScreenState extends State<MapScreen> {
                         _selectedLocation = null;
                       });
                     },
-                    child: LocationPopup(
-                      location: _selectedLocation!,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      child: LocationPopup(
+                        key: ValueKey(_selectedLocation!.id),
+                        location: _selectedLocation!,
+                      ),
                     ),
                   ),
                 ),

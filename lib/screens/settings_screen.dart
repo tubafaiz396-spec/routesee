@@ -1,7 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/navigation_provider.dart' as nav;
+
 import '../providers/location_provider.dart';
+import '../providers/navigation_provider.dart' as nav;
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -11,6 +12,7 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
           slivers: [
             SliverAppBar(
               floating: true,
@@ -31,7 +33,7 @@ class SettingsScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Navigation',
+                      'Map View',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -39,70 +41,45 @@ class SettingsScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Card(
-                      child: Column(
-                        children: [
-                          Consumer<nav.NavigationProvider>(
-                            builder: (context, navProvider, child) {
-                              return Column(
-                                children: [
-                                  RadioListTile<nav.NavigationMode>(
-                                    title: const Row(
-                                      children: [
-                                        Icon(Icons.directions_walk),
-                                        SizedBox(width: 12),
-                                        Text('Walking'),
-                                      ],
-                                    ),
-                                    subtitle: const Text('Average speed: 5 km/h'),
-                                    value: nav.NavigationMode.walking,
-                                    groupValue: navProvider.navigationMode,
-                                    onChanged: (value) {
-                                      if (value != null) {
-                                        navProvider.setNavigationMode(value);
-                                      }
-                                    },
-                                  ),
-                                  const Divider(height: 1),
-                                  RadioListTile<nav.NavigationMode>(
-                                    title: const Row(
-                                      children: [
-                                        Icon(Icons.directions_bike),
-                                        SizedBox(width: 12),
-                                        Text('Cycling'),
-                                      ],
-                                    ),
-                                    subtitle: const Text('Average speed: 15 km/h'),
-                                    value: nav.NavigationMode.cycling,
-                                    groupValue: navProvider.navigationMode,
-                                    onChanged: (value) {
-                                      if (value != null) {
-                                        navProvider.setNavigationMode(value);
-                                      }
-                                    },
-                                  ),
-                                  const Divider(height: 1),
-                                  RadioListTile<nav.NavigationMode>(
-                                    title: const Row(
-                                      children: [
-                                        Icon(Icons.directions_car),
-                                        SizedBox(width: 12),
-                                        Text('Driving'),
-                                      ],
-                                    ),
-                                    subtitle: const Text('Average speed: 30 km/h'),
-                                    value: nav.NavigationMode.driving,
-                                    groupValue: navProvider.navigationMode,
-                                    onChanged: (value) {
-                                      if (value != null) {
-                                        navProvider.setNavigationMode(value);
-                                      }
-                                    },
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ],
+                      child: Consumer<nav.NavigationProvider>(
+                        builder: (context, navProvider, child) {
+                          return Column(
+                            children: [
+                              _MapViewModeTile(
+                                title: '2D Map',
+                                subtitle: 'Classic top-down campus map',
+                                icon: Icons.map_outlined,
+                                isSelected: navProvider.mapViewMode ==
+                                    nav.MapViewMode.normal2d,
+                                onTap: () => navProvider.setMapViewMode(
+                                  nav.MapViewMode.normal2d,
+                                ),
+                              ),
+                              const Divider(height: 1),
+                              _MapViewModeTile(
+                                title: '3D Buildings',
+                                subtitle: 'Tilted normal map with buildings',
+                                icon: Icons.location_city_outlined,
+                                isSelected: navProvider.mapViewMode ==
+                                    nav.MapViewMode.buildings3d,
+                                onTap: () => navProvider.setMapViewMode(
+                                  nav.MapViewMode.buildings3d,
+                                ),
+                              ),
+                              const Divider(height: 1),
+                              _MapViewModeTile(
+                                title: 'Hybrid',
+                                subtitle: 'Satellite imagery with roads',
+                                icon: Icons.satellite_alt_outlined,
+                                isSelected: navProvider.mapViewMode ==
+                                    nav.MapViewMode.hybrid,
+                                onTap: () => navProvider.setMapViewMode(
+                                  nav.MapViewMode.hybrid,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -117,10 +94,10 @@ class SettingsScreen extends StatelessWidget {
                     Card(
                       child: Column(
                         children: [
-                          ListTile(
-                            leading: const Icon(Icons.info_outline),
-                            title: const Text('Version'),
-                            subtitle: const Text('1.0.0'),
+                          const ListTile(
+                            leading: Icon(Icons.info_outline),
+                            title: Text('Version'),
+                            subtitle: Text('1.0.0'),
                           ),
                           const Divider(height: 1),
                           ListTile(
@@ -152,7 +129,8 @@ class SettingsScreen extends StatelessWidget {
                     const SizedBox(height: 12),
                     Card(
                       child: ListTile(
-                        leading: const Icon(Icons.delete_outline, color: Colors.red),
+                        leading:
+                            const Icon(Icons.delete_outline, color: Colors.red),
                         title: const Text(
                           'Clear Favorites',
                           style: TextStyle(color: Colors.red),
@@ -198,7 +176,7 @@ class SettingsScreen extends StatelessWidget {
               Text('• Detailed location information'),
               Text('• Save favorite locations'),
               Text('• Get directions and estimated time'),
-              Text('• Multiple navigation modes'),
+              Text('• Walking directions'),
               SizedBox(height: 16),
               Text(
                 'Developed with Flutter',
@@ -294,3 +272,64 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
+class _MapViewModeTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _MapViewModeTile({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: isSelected ? Colors.blue.withValues(alpha: 0.06) : Colors.white,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                child: Icon(
+                  isSelected
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_off,
+                  key: ValueKey(isSelected),
+                  color:
+                      isSelected ? Theme.of(context).colorScheme.primary : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

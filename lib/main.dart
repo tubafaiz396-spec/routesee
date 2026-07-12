@@ -1,7 +1,7 @@
 import 'package:campus_navigator/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'providers/location_provider.dart';
 import 'providers/navigation_provider.dart';
 import 'screens/home_screen.dart';
@@ -91,10 +91,11 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _selectedIndex = 0;
+  final MapScreenController _mapScreenController = MapScreenController();
 
-  final List<Widget> _screens = [
+  late final List<Widget> _screens = [
     const HomeScreen(),
-    const MapScreen(),
+    MapScreen(controller: _mapScreenController),
     const FavoritesScreen(),
     const SettingsScreen(),
   ];
@@ -103,6 +104,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     setState(() {
       _selectedIndex = index;
     });
+
+    if (index == 1) {
+      final navProvider = context.read<NavigationProvider>();
+      if (navProvider.destination != null &&
+          navProvider.currentLocation != null) {
+        _mapScreenController.focusActiveRoute();
+      } else {
+        _mapScreenController.showCampusOverview();
+      }
+    }
   }
 
   @override

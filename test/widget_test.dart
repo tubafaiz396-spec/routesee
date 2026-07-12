@@ -11,10 +11,9 @@ import 'package:campus_navigator/main.dart';
 
 void main() {
   testWidgets('Campus Navigator app smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
     await tester.pumpWidget(const CampusNavigatorApp());
+    await tester.pump(const Duration(milliseconds: 3200));
 
-    // Verify that the app loads
-    expect(find.text('Campus Navigator'), findsOneWidget);
+    expect(find.text('RouteSee'), findsWidgets);
   });
 }

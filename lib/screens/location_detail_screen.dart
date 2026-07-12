@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../models/location_model.dart';
 import '../providers/location_provider.dart';
 import '../providers/navigation_provider.dart';
@@ -19,11 +20,14 @@ class LocationDetailScreen extends StatefulWidget {
 
 class _LocationDetailScreenState extends State<LocationDetailScreen> {
   late TextEditingController _openingHoursController;
+  bool _isStartingNavigation = false;
 
   @override
   void initState() {
     super.initState();
-    _openingHoursController = TextEditingController(text: widget.location.openingHours ?? '');
+    _openingHoursController = TextEditingController(
+      text: widget.location.openingHours ?? '',
+    );
   }
 
   @override
@@ -34,16 +38,21 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final location = context.select<LocationProvider, CampusLocation?>(
+          (provider) => provider.getLocationById(widget.location.id),
+        ) ??
+        widget.location;
+
     return Scaffold(
       body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
         slivers: [
-          // App Bar with Image
           SliverAppBar(
             expandedHeight: 200,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
-                widget.location.name,
+                location.name,
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
@@ -56,43 +65,52 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
                   ],
                 ),
               ),
-              background: widget.location.imageUrl != null &&
-                      widget.location.imageUrl!.isNotEmpty
+              background: location.imageUrl != null &&
+                      location.imageUrl!.isNotEmpty
                   ? GestureDetector(
                       onTap: () =>
-                          _showFullScreenImage(context, widget.location.imageUrl!),
-                      child: Image.network(
-                        widget.location.imageUrl!,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Center(
-                            child: CircularProgressIndicator(
-                              value: loadingProgress.expectedTotalBytes != null
-                                  ? loadingProgress.cumulativeBytesLoaded /
-                                      loadingProgress.expectedTotalBytes!
-                                  : null,
-                            ),
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          return _buildCategoryBackground(widget.location.category);
-                        },
+                          _showFullScreenImage(context, location.imageUrl!),
+                      child: Hero(
+                        tag: 'location-media-${location.id}',
+                        child: Image.network(
+                          location.imageUrl!,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) {
+                              return child;
+                            }
+                            return Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes !=
+                                        null
+                                    ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                    : null,
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return _buildCategoryBackground(location.category);
+                          },
+                        ),
                       ),
                     )
-                  : _buildCategoryBackground(widget.location.category),
+                  : _buildCategoryBackground(location.category),
             ),
             actions: [
               Consumer<LocationProvider>(
                 builder: (context, provider, child) {
-                  final isFavorite = provider.isFavorite(widget.location);
+                  final isFavorite = provider.isFavorite(location);
                   return IconButton(
                     icon: Icon(
                       isFavorite ? Icons.favorite : Icons.favorite_border,
                       color: isFavorite ? Colors.red : Colors.white,
                     ),
-                    onPressed: () {
-                      provider.toggleFavorite(widget.location);
+                    onPressed: () async {
+                      await provider.toggleFavorite(location);
+                      if (!context.mounted) {
+                        return;
+                      }
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
@@ -109,127 +127,125 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
               ),
             ],
           ),
-
-          // Content
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Category Badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _getCategoryColor(widget.location.category)
-                          .withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      widget.location.category.displayName,
-                      style: TextStyle(
-                        color: _getCategoryColor(widget.location.category),
-                        fontWeight: FontWeight.bold,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOut,
+              builder: (context, value, child) {
+                return Transform.translate(
+                  offset: Offset(0, 10 * (1 - value)),
+                  child: Opacity(opacity: value, child: child),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
                       ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Description
-                  const Text(
-                    'Description',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.location.description,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: Colors.grey[700],
-                      height: 1.5,
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Building Code
-                  if (widget.location.buildingCode != null) ...[
-                    _buildInfoRow(
-                      Icons.business,
-                      'Building Code',
-                      widget.location.buildingCode!,
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-
-                  // Opening Hours (Editable)
-                  if (widget.location.openingHours != null) ...[
-                    _buildEditableOpeningHours(),
-                    const SizedBox(height: 12),
-                  ],
-
-                  // Contact Info
-                  if (widget.location.contactInfo != null) ...[
-                    _buildInfoRow(
-                      Icons.phone,
-                      'Contact',
-                      widget.location.contactInfo!,
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-
-                  // Floor
-                  if (widget.location.floor != null) ...[
-                    _buildInfoRow(
-                      Icons.layers,
-                      'Floor',
-                      'Floor ${widget.location.floor}',
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-
-                  const SizedBox(height: 24),
-
-                  // Navigate Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        context
-                            .read<NavigationProvider>()
-                            .startNavigation(widget.location);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const MapScreen(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.directions),
-                      label: const Text(
-                        'Get Directions',
-                        style: TextStyle(fontSize: 16),
+                      decoration: BoxDecoration(
+                        color: _getCategoryColor(location.category)
+                            .withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      child: Text(
+                        location.category.displayName,
+                        style: TextStyle(
+                          color: _getCategoryColor(location.category),
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
-                  ),
-
-                  const SizedBox(height: 16),
-                ],
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Description',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      location.description,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.grey[700],
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    if (location.buildingCode != null) ...[
+                      _buildInfoRow(
+                        Icons.business,
+                        'Building Code',
+                        location.buildingCode!,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (location.openingHours != null) ...[
+                      _buildEditableOpeningHours(location),
+                      const SizedBox(height: 12),
+                    ],
+                    if (location.contactInfo != null) ...[
+                      _buildInfoRow(
+                        Icons.phone,
+                        'Contact',
+                        location.contactInfo!,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (location.floor != null) ...[
+                      _buildInfoRow(
+                        Icons.layers,
+                        'Floor',
+                        'Floor ${location.floor}',
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _isStartingNavigation
+                            ? null
+                            : () => _handleGetDirections(location),
+                        icon: _isStartingNavigation
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : const Icon(Icons.directions),
+                        label: Text(
+                          _isStartingNavigation
+                              ? 'Starting navigation...'
+                              : 'Get Directions',
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              Theme.of(context).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
               ),
             ),
           ),
@@ -238,7 +254,42 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
     );
   }
 
-  Widget _buildEditableOpeningHours() {
+  Future<void> _handleGetDirections(CampusLocation location) async {
+    setState(() {
+      _isStartingNavigation = true;
+    });
+
+    final navProvider = context.read<NavigationProvider>();
+    final hasLocation = await navProvider.startNavigation(location);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isStartingNavigation = false;
+    });
+
+    if (!hasLocation) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Location access is needed to show your position and route line.',
+          ),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const MapScreen(),
+      ),
+    );
+  }
+
+  Widget _buildEditableOpeningHours(CampusLocation location) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -265,11 +316,15 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
           ],
         ),
         const SizedBox(height: 4),
-        Text(
-          widget.location.openingHours ?? '',
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: Text(
+            location.openingHours ?? '',
+            key: ValueKey(location.openingHours),
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
       ],
@@ -298,9 +353,9 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
             onPressed: () {
               final newHours = _openingHoursController.text;
               context.read<LocationProvider>().updateLocationOpeningHours(
-                widget.location.id,
-                newHours,
-              );
+                    widget.location.id,
+                    newHours,
+                  );
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
