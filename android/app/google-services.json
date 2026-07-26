@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "521608803942",
+    "project_id": "routesee-a06a9",
+    "storage_bucket": "routesee-a06a9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:521608803942:android:747717afcf1e626e951fa7",
+        "android_client_info": {
+          "package_name": "com.solution.routsee"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCzS8QlDURuxZK4Z2hy-OP3G_CCAABQ3Z0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

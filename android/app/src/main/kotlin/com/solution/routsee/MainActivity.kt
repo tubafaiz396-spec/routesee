@@ -1,4 +1,4 @@
-package com.example.maps_project
+package com.solution.routsee
 
 import io.flutter.embedding.android.FlutterActivity
 

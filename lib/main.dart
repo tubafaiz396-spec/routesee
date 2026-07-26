@@ -1,4 +1,5 @@
 import 'package:campus_navigator/screens/settings_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +10,15 @@ import 'screens/map_screen.dart';
 import 'screens/favorites_screen.dart';
 import 'screens/splash_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+  } catch (error) {
+    debugPrint(
+        'Firebase initialization failed; using bundled campus data: $error');
+  }
+
   runApp(const CampusNavigatorApp());
 }
 

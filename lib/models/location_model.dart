@@ -63,7 +63,10 @@ class CampusLocation {
       id: json['id'],
       name: json['name'],
       description: json['description'],
-      coordinates: LatLng(json['latitude'], json['longitude']),
+      coordinates: LatLng(
+        (json['latitude'] as num).toDouble(),
+        (json['longitude'] as num).toDouble(),
+      ),
       category: LocationCategory.values.firstWhere(
         (e) => e.toString() == json['category'],
         orElse: () => LocationCategory.other,
@@ -155,4 +158,3 @@ extension LocationCategoryExtension on LocationCategory {
     }
   }
 }
-

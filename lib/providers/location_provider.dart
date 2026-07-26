@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/location_model.dart';
 import '../data/campus_data.dart';
+import '../services/remote_config_service.dart';
 
 class LocationProvider with ChangeNotifier {
   List<CampusLocation> _allLocations = [];
@@ -10,6 +11,7 @@ class LocationProvider with ChangeNotifier {
   CampusLocation? _selectedLocation;
   LocationCategory? _selectedCategory;
   String _searchQuery = '';
+  final RemoteConfigService _remoteConfigService = RemoteConfigService();
 
   // Getters
   List<CampusLocation> get allLocations => _allLocations;
@@ -24,9 +26,27 @@ class LocationProvider with ChangeNotifier {
     _loadFavorites();
   }
 
-  // Load all locations from static data and SharedPreferences
+  // Load bundled data first, then replace it with Remote Config data when
+  // available. The bundled list remains the offline fallback.
   Future<void> _loadLocations() async {
     _allLocations = List.from(CampusData.locations);
+    await _applyCustomOpeningHours();
+    _refreshFilteredLocations();
+    notifyListeners();
+
+    final remoteLocations = await _remoteConfigService.fetchCampusLocations();
+    if (remoteLocations == null) {
+      return;
+    }
+
+    _allLocations = remoteLocations;
+    await _applyCustomOpeningHours();
+    _syncFavoritesWithLocations();
+    _refreshFilteredLocations();
+    notifyListeners();
+  }
+
+  Future<void> _applyCustomOpeningHours() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       for (int i = 0; i < _allLocations.length; i++) {
@@ -35,18 +55,11 @@ class LocationProvider with ChangeNotifier {
         if (customHours != null) {
           _allLocations[i] =
               _allLocations[i].copyWith(openingHours: customHours);
-          final campusIndex = CampusData.locations
-              .indexWhere((loc) => loc.id == _allLocations[i].id);
-          if (campusIndex != -1) {
-            CampusData.locations[campusIndex] = _allLocations[i];
-          }
         }
       }
     } catch (e) {
       debugPrint('Error loading custom opening hours: $e');
     }
-    _filteredLocations = _allLocations;
-    notifyListeners();
   }
 
   // Load favorites from SharedPreferences
@@ -97,12 +110,6 @@ class LocationProvider with ChangeNotifier {
             _favoriteLocations[favIndex].copyWith(openingHours: openingHours);
       }
 
-      final campusIndex =
-          CampusData.locations.indexWhere((loc) => loc.id == locationId);
-      if (campusIndex != -1) {
-        CampusData.locations[campusIndex] = _allLocations[index];
-      }
-
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('opening_hours_$locationId', openingHours);
@@ -142,55 +149,14 @@ class LocationProvider with ChangeNotifier {
   // Search locations
   void searchLocations(String query) {
     _searchQuery = query;
-
-    if (query.isEmpty) {
-      if (_selectedCategory != null) {
-        _filteredLocations =
-            CampusData.getLocationsByCategory(_selectedCategory!);
-      } else {
-        _filteredLocations = _allLocations;
-      }
-    } else {
-      final searchResults = CampusData.searchLocations(query);
-
-      if (_selectedCategory != null) {
-        _filteredLocations = searchResults
-            .where((loc) => loc.category == _selectedCategory)
-            .toList();
-      } else {
-        _filteredLocations = searchResults;
-      }
-    }
-
+    _refreshFilteredLocations();
     notifyListeners();
   }
 
   // Filter by category
   void filterByCategory(LocationCategory? category) {
     _selectedCategory = category;
-
-    if (category == null) {
-      if (_searchQuery.isEmpty) {
-        _filteredLocations = _allLocations;
-      } else {
-        _filteredLocations = CampusData.searchLocations(_searchQuery);
-      }
-    } else {
-      final categoryLocations = CampusData.getLocationsByCategory(category);
-
-      if (_searchQuery.isEmpty) {
-        _filteredLocations = categoryLocations;
-      } else {
-        _filteredLocations = categoryLocations
-            .where((loc) =>
-                loc.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                loc.description
-                    .toLowerCase()
-                    .contains(_searchQuery.toLowerCase()))
-            .toList();
-      }
-    }
-
+    _refreshFilteredLocations();
     notifyListeners();
   }
 
@@ -198,22 +164,67 @@ class LocationProvider with ChangeNotifier {
   void clearFilters() {
     _selectedCategory = null;
     _searchQuery = '';
-    _filteredLocations = _allLocations;
+    _refreshFilteredLocations();
     notifyListeners();
   }
 
   // Get locations by category
   List<CampusLocation> getLocationsByCategory(LocationCategory category) {
-    return CampusData.getLocationsByCategory(category);
+    return _allLocations
+        .where((location) => location.category == category)
+        .toList();
   }
 
   // Get category counts
   Map<LocationCategory, int> getCategoryCounts() {
-    return CampusData.getCategoryCounts();
+    return {
+      for (final category in LocationCategory.values)
+        category: _allLocations
+            .where((location) => location.category == category)
+            .length,
+    };
   }
 
   // Get location by ID
   CampusLocation? getLocationById(String id) {
-    return CampusData.getLocationById(id);
+    for (final location in _allLocations) {
+      if (location.id == id) {
+        return location;
+      }
+    }
+    return null;
+  }
+
+  void _syncFavoritesWithLocations() {
+    final favoriteIds =
+        _favoriteLocations.map((location) => location.id).toSet();
+    _favoriteLocations = _allLocations
+        .where((location) => favoriteIds.contains(location.id))
+        .toList();
+  }
+
+  void _refreshFilteredLocations() {
+    Iterable<CampusLocation> locations = _allLocations;
+
+    if (_selectedCategory != null) {
+      locations = locations.where(
+        (location) => location.category == _selectedCategory,
+      );
+    }
+
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      locations = locations.where(
+        (location) =>
+            location.name.toLowerCase().contains(query) ||
+            location.description.toLowerCase().contains(query) ||
+            (location.buildingCode?.toLowerCase().contains(query) ?? false) ||
+            location.facilities.any(
+              (facility) => facility.toLowerCase().contains(query),
+            ),
+      );
+    }
+
+    _filteredLocations = locations.toList();
   }
 }
