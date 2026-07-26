@@ -22,8 +22,12 @@ class LocationProvider with ChangeNotifier {
   String get searchQuery => _searchQuery;
 
   LocationProvider() {
-    _loadLocations();
-    _loadFavorites();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    await _loadLocations();
+    await _loadFavorites();
   }
 
   // Load bundled data first, then replace it with Remote Config data when
@@ -32,10 +36,11 @@ class LocationProvider with ChangeNotifier {
     _allLocations = List.from(CampusData.locations);
     await _applyCustomOpeningHours();
     _refreshFilteredLocations();
-    notifyListeners();
 
     final remoteLocations = await _remoteConfigService.fetchCampusLocations();
     if (remoteLocations == null) {
+      _syncFavoritesWithLocations();
+      notifyListeners();
       return;
     }
 
