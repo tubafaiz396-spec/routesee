@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../main.dart';
+import '../providers/location_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../theme/app_palette.dart';
 
@@ -23,6 +24,8 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<Offset> _titleOffset;
   late final Animation<double> _subtitleOpacity;
   late final Animation<Offset> _subtitleOffset;
+  bool _isReadyToNavigate = false;
+  String? _loadError;
 
   @override
   void initState() {
@@ -71,7 +74,7 @@ class _SplashScreenState extends State<SplashScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestLocationPermission();
     });
-    _navigateToHome();
+    _waitForInitialData();
   }
 
   @override
@@ -80,15 +83,42 @@ class _SplashScreenState extends State<SplashScreen>
     super.dispose();
   }
 
-  Future<void> _navigateToHome() async {
-    await Future.delayed(const Duration(seconds: 3));
+  Future<void> _waitForInitialData() async {
+    final locationProvider = context.read<LocationProvider>();
+    try {
+      await locationProvider.initialization;
+      if (!mounted) {
+        return;
+      }
 
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => const MainNavigationScreen(),
-        ),
-      );
+      if (locationProvider.loadError != null) {
+        setState(() {
+          _loadError = locationProvider.loadError;
+        });
+        return;
+      }
+
+      setState(() {
+        _isReadyToNavigate = true;
+        _loadError = null;
+      });
+
+      await Future.delayed(const Duration(milliseconds: 350));
+
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => const MainNavigationScreen(),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _loadError = 'Unable to load campus data. Please check your internet connection.';
+      });
     }
   }
 
@@ -171,15 +201,42 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
               const Spacer(),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 50.0),
-                child: SizedBox(
-                  width: 30,
-                  height: 30,
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    strokeWidth: 3,
-                  ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 50.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 30,
+                      height: 30,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        strokeWidth: 3,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_loadError != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        child: Text(
+                          _loadError!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      )
+                    else if (!_isReadyToNavigate)
+                      const Text(
+                        'Loading campus data...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],

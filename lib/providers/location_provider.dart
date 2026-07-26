@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/location_model.dart';
-import '../data/campus_data.dart';
 import '../services/remote_config_service.dart';
 
 class LocationProvider with ChangeNotifier {
@@ -11,6 +10,9 @@ class LocationProvider with ChangeNotifier {
   CampusLocation? _selectedLocation;
   LocationCategory? _selectedCategory;
   String _searchQuery = '';
+  bool _isLoading = true;
+  String? _loadError;
+  late final Future<void> _initialization;
   final RemoteConfigService _remoteConfigService = RemoteConfigService();
 
   // Getters
@@ -20,35 +22,42 @@ class LocationProvider with ChangeNotifier {
   CampusLocation? get selectedLocation => _selectedLocation;
   LocationCategory? get selectedCategory => _selectedCategory;
   String get searchQuery => _searchQuery;
+  bool get isLoading => _isLoading;
+  String? get loadError => _loadError;
+  Future<void> get initialization => _initialization;
 
   LocationProvider() {
-    _bootstrap();
+    _initialization = _bootstrap();
   }
 
   Future<void> _bootstrap() async {
-    await _loadLocations();
-    await _loadFavorites();
+    _isLoading = true;
+    _loadError = null;
+    notifyListeners();
+
+    try {
+      await _loadLocations();
+      await _loadFavorites();
+      _refreshFilteredLocations();
+    } catch (e) {
+      _loadError = 'Unable to load campus data. Please check your internet connection.';
+      debugPrint('Error bootstrapping location provider: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  // Load bundled data first, then replace it with Remote Config data when
-  // available. The bundled list remains the offline fallback.
   Future<void> _loadLocations() async {
-    _allLocations = List.from(CampusData.locations);
-    await _applyCustomOpeningHours();
-    _refreshFilteredLocations();
-
     final remoteLocations = await _remoteConfigService.fetchCampusLocations();
     if (remoteLocations == null) {
-      _syncFavoritesWithLocations();
-      notifyListeners();
-      return;
+      throw StateError('Remote Config returned no campus locations.');
     }
 
     _allLocations = remoteLocations;
     await _applyCustomOpeningHours();
     _syncFavoritesWithLocations();
     _refreshFilteredLocations();
-    notifyListeners();
   }
 
   Future<void> _applyCustomOpeningHours() async {
