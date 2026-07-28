@@ -55,25 +55,8 @@ class LocationProvider with ChangeNotifier {
     }
 
     _allLocations = remoteLocations;
-    await _applyCustomOpeningHours();
     _syncFavoritesWithLocations();
     _refreshFilteredLocations();
-  }
-
-  Future<void> _applyCustomOpeningHours() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      for (int i = 0; i < _allLocations.length; i++) {
-        final customHours =
-            prefs.getString('opening_hours_${_allLocations[i].id}');
-        if (customHours != null) {
-          _allLocations[i] =
-              _allLocations[i].copyWith(openingHours: customHours);
-        }
-      }
-    } catch (e) {
-      debugPrint('Error loading custom opening hours: $e');
-    }
   }
 
   // Load favorites from SharedPreferences
@@ -108,31 +91,6 @@ class LocationProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('favorite_locations');
     notifyListeners();
-  }
-
-  // Update location opening hours
-  Future<void> updateLocationOpeningHours(
-      String locationId, String openingHours) async {
-    final index = _allLocations.indexWhere((loc) => loc.id == locationId);
-    if (index != -1) {
-      _allLocations[index] =
-          _allLocations[index].copyWith(openingHours: openingHours);
-      final favIndex =
-          _favoriteLocations.indexWhere((loc) => loc.id == locationId);
-      if (favIndex != -1) {
-        _favoriteLocations[favIndex] =
-            _favoriteLocations[favIndex].copyWith(openingHours: openingHours);
-      }
-
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('opening_hours_$locationId', openingHours);
-      } catch (e) {
-        debugPrint('Error saving opening hours: $e');
-      }
-
-      notifyListeners();
-    }
   }
 
   // Toggle favorite status

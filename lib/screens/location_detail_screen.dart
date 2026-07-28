@@ -19,22 +19,7 @@ class LocationDetailScreen extends StatefulWidget {
 }
 
 class _LocationDetailScreenState extends State<LocationDetailScreen> {
-  late TextEditingController _openingHoursController;
   bool _isStartingNavigation = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _openingHoursController = TextEditingController(
-      text: widget.location.openingHours ?? '',
-    );
-  }
-
-  @override
-  void dispose() {
-    _openingHoursController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +173,7 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
                       const SizedBox(height: 12),
                     ],
                     if (location.openingHours != null) ...[
-                      _buildEditableOpeningHours(location),
+                      _buildOpeningHours(location),
                       const SizedBox(height: 12),
                     ],
                     if (location.contactInfo != null) ...[
@@ -289,29 +274,20 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
     );
   }
 
-  Widget _buildEditableOpeningHours(CampusLocation location) {
+  Widget _buildOpeningHours(CampusLocation location) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                Icon(Icons.access_time, size: 20, color: Colors.grey[600]),
-                const SizedBox(width: 12),
-                Text(
-                  'Opening Hours',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-            IconButton(
-              icon: const Icon(Icons.edit, size: 18),
-              onPressed: () => _editOpeningHours(context),
+            Icon(Icons.access_time, size: 20, color: Colors.grey[600]),
+            const SizedBox(width: 12),
+            Text(
+              'Opening Hours',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
             ),
           ],
         ),
@@ -328,46 +304,6 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  void _editOpeningHours(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Opening Hours'),
-        content: TextField(
-          controller: _openingHoursController,
-          decoration: const InputDecoration(
-            labelText: 'Opening Hours',
-            hintText: 'e.g., 9:00 AM - 5:00 PM',
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final newHours = _openingHoursController.text;
-              context.read<LocationProvider>().updateLocationOpeningHours(
-                    widget.location.id,
-                    newHours,
-                  );
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Opening hours updated'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
     );
   }
 

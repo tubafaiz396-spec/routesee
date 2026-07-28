@@ -472,42 +472,6 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ],
             ),
-            if (distance != null && estimatedTime != null) ...[
-              const Divider(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  Column(
-                    children: [
-                      Icon(Icons.straighten, color: accentColor),
-                      const SizedBox(height: 4),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 180),
-                        child: Text(
-                          distance,
-                          key: ValueKey(distance),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Column(
-                    children: [
-                      Icon(Icons.access_time, color: Colors.green),
-                      const SizedBox(height: 4),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 180),
-                        child: Text(
-                          estimatedTime,
-                          key: ValueKey(estimatedTime),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
             if (navProvider.isLoadingRoute) ...[
               const SizedBox(height: 12),
               const LinearProgressIndicator(minHeight: 3),
